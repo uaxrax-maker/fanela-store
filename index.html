@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- iOS / iPhone Web App (PWA) Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="مخزون المحل">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="format-detection" content="telephone=no">
+
+    <title>نظام مراقبة المخزون الذكي للمحل - نسخة الآيفون</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Cairo Arabic Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- HTML5 QR / Barcode Scanner library -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        cairo: ['Cairo', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+                    },
+                    colors: {
+                        ios: {
+                            bg: '#F2F2F7',
+                            card: '#FFFFFF',
+                            blue: '#007AFF',
+                            green: '#34C759',
+                            orange: '#FF9500',
+                            red: '#FF3B30',
+                            gray: '#8E8E93',
+                            border: '#E5E5EA'
+                        },
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Cairo', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #F2F2F7;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            user-select: none;
+            overscroll-behavior-y: none;
+        }
+        /* Allow text selection inside inputs */
+        input, textarea {
+            user-select: auto;
+            -webkit-user-select: auto;
+            font-size: 16px !important; /* Prevents iOS Safari auto-zoom on focus */
+        }
+        /* iOS Safe Area Support for Notch & Home Indicator */
+        .ios-header {
+            padding-top: max(env(safe-area-inset-top, 12px), 12px);
+        }
+        .ios-bottom-nav {
+            padding-bottom: max(env(safe-area-inset-bottom, 12px), 12px);
+        }
+        .safe-content-bottom {
+            padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 90px);
+        }
+        /* Hide scrollbars for horizontal pills */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* iOS Sheet Animation */
+        @keyframes slideUpSheet {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        .ios-sheet {
+            animation: slideUpSheet 0.28s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+        }
+        /* Pulse effect on counter update */
+        @keyframes popScale {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.22); }
+            100% { transform: scale(1); }
+        }
+        .animate-pop {
+            animation: popScale 0.2s ease-out;
+        }
+    </style>
+</head>
+<body class="text-slate-900 antialiased min-h-screen flex flex-col justify-between">
+
+    <!-- Sticky iOS Blur Header -->
+    <header class="sticky top-0 z-30 bg-white/85 backdrop-blur-xl border-b border-slate-200/80 px-4 pb-3 ios-header">
+        <div class="max-w-md mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center text-white shadow-md shadow-green-500/20">
+                    <i class="fa-solid fa-boxes-stacked text-lg"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-1.5">
+                        <h1 class="text-base font-extrabold text-slate-900 leading-tight">مخزون المحل</h1>
+                        <span id="syncBadge" onclick="showSyncDetails()" class="cursor-pointer inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span id="syncDot" class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span id="syncText">محفوظ تلقائياً ✓</span>
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 font-semibold mt-0.5" id="headerSummary">جاري فحص المخزون...</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-1.5">
+                <!-- iPhone Install Guide Button -->
+                <button onclick="openIosGuideModal()" title="تثبيت على الآيفون" class="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition active:scale-90">
+                    <i class="fa-brands fa-apple text-base"></i>
+                </button>
+                <!-- Barcode Scanner Button -->
+                <button onclick="openScannerModal(false)" title="مسح باركود" class="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition active:scale-90">
+                    <i class="fa-solid fa-barcode text-sm"></i>
+                </button>
+                <!-- Add New Item Button -->
+                <button onclick="openModal('add')" class="h-9 px-3 rounded-xl bg-emerald-600 text-white flex items-center gap-1.5 font-bold text-xs shadow-sm shadow-emerald-600/20 hover:bg-emerald-700 transition active:scale-95">
+                    <i class="fa-solid fa-plus text-xs"></i>
+                    <span>إضافة</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-md mx-auto w-full px-3.5 pt-3 safe-content-bottom flex-1">
+
+        <!-- TAB 1: INVENTORY LIST -->
+        <div id="tab-inventory" class="space-y-3 block">
+            
+            <!-- Interactive Status Summary Cards (Tappable Filters) -->
+            <div class="grid grid-cols-3 gap-2">
+                <button onclick="setStockStatusFilter('all')" id="card-filter-all" class="bg-white p-2.5 rounded-2xl border-2 border-slate-900 shadow-2xs flex flex-col items-center justify-center text-center transition active:scale-95">
+                    <span class="text-[11px] text-slate-500 font-bold">كل الأصناف</span>
+                    <span id="statTotalItems" class="text-lg font-extrabold text-slate-900 mt-0.5">0</span>
+                    <span id="statTotalUnitsSub" class="text-[10px] text-emerald-600 font-bold">0 قطعة</span>
+                </button>
+
+                <button onclick="setStockStatusFilter('low')" id="card-filter-low" class="bg-white p-2.5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col items-center justify-center text-center transition active:scale-95">
+                    <span class="text-[11px] text-amber-600 font-bold">قاربت النفاد</span>
+                    <span id="statLowStock" class="text-lg font-extrabold text-amber-600 mt-0.5">0</span>
+                    <span class="text-[10px] text-slate-400 font-semibold">تنبيه نقص</span>
+                </button>
+
+                <button onclick="setStockStatusFilter('out')" id="card-filter-out" class="bg-white p-2.5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col items-center justify-center text-center transition active:scale-95">
+                    <span class="text-[11px] text-rose-600 font-bold">نفذت الكمية</span>
+                    <span id="statOutStockCard" class="text-lg font-extrabold text-rose-600 mt-0.5">0</span>
+                    <span class="text-[10px] text-slate-400 font-semibold">رصيد صفر</span>
+                </button>
+            </div>
+
+            <!-- iOS Style Search & Category Bar -->
+            <div class="bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2.5">
+                <div class="relative flex items-center">
+                    <i class="fa-solid fa-magnifying-glass absolute right-3.5 text-slate-400 text-sm pointer-events-none"></i>
+                    <input type="text" id="searchInput" oninput="renderItems()" placeholder="ابحث بالاسم، المقاس، اللون، أو الباركود..."
+                        class="w-full bg-slate-100/90 border border-transparent rounded-xl pr-9 pl-9 py-2 text-sm text-slate-800 placeholder-slate-400 focus:outline-hidden focus:bg-white focus:border-emerald-500 transition">
+                    <button onclick="clearSearch()" id="clearSearchBtn" class="hidden absolute left-3 text-slate-400 hover:text-slate-600 p-1">
+                        <i class="fa-solid fa-circle-xmark text-base"></i>
+                    </button>
+                </div>
+
+                <!-- Horizontal Category Pills -->
+                <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs font-bold" id="categoryFilterContainer">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
+            <!-- Active Filter Indicator Banner -->
+            <div id="activeFilterBanner" class="hidden items-center justify-between bg-amber-50 border border-amber-200/80 px-3 py-2 rounded-xl text-xs font-bold text-amber-800">
+                <span id="activeFilterText">تصفية نشطة</span>
+                <button onclick="resetAllFilters()" class="text-amber-900 underline text-[11px]">إلغاء التصفية</button>
+            </div>
+
+            <!-- Inventory Items Cards Container -->
+            <div id="itemsContainer" class="space-y-2.5">
+                <!-- Dynamically Populated -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="hidden text-center py-12 px-4 bg-white rounded-3xl border border-dashed border-slate-200">
+                <div class="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-400 text-xl mb-3">
+                    <i class="fa-solid fa-box-open"></i>
+                </div>
+                <h3 class="text-base font-extrabold text-slate-700">لا توجد بضائع مطابقة</h3>
+                <p class="text-xs text-slate-400 mt-1">يمكنك إضافة صنف جديد أو تغيير خيارات البحث</p>
+                <div class="mt-4 flex items-center justify-center gap-2">
+                    <button onclick="openModal('add')" class="px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-xs hover:bg-emerald-700 active:scale-95 transition">
+                        + إضافة صنف جديد
+                    </button>
+                    <button onclick="resetAllFilters()" class="px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 active:scale-95 transition">
+                        عرض الكل
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: ACTIVITY LOG (سجل الحركات) -->
+        <div id="tab-history" class="space-y-3 hidden">
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                        <i class="fa-solid fa-clock-rotate-left text-emerald-600"></i>
+                        <span>سجل حركات البيع والسحب والإضافة</span>
+                    </h3>
+                    <button onclick="clearHistoryLog()" class="text-[11px] text-rose-600 font-bold hover:underline">مسح السجل</button>
+                </div>
+                <p class="text-xs text-slate-500 mb-3">يتم تسجيل كل عملية زيادة أو نقصان في البضاعة تلقائياً مع الوقت والتاريخ.</p>
+                <div id="historyListContainer" class="divide-y divide-slate-100 space-y-2 max-h-[65vh] overflow-y-auto">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: REPORTS & ANALYTICS (الإحصائيات) -->
+        <div id="tab-analytics" class="space-y-3.5 hidden">
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+                <h3 class="font-extrabold text-slate-800 text-sm mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-sack-dollar text-emerald-600"></i> ملخص جرد البضاعة والقيمة
+                </h3>
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div class="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-100">
+                        <span class="text-[11px] text-emerald-800 font-bold block">إجمالي قيمة البضاعة</span>
+                        <span id="statTotalValue" class="text-base font-extrabold text-emerald-700 mt-1 block">0.000 ر.ع</span>
+                    </div>
+                    <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200/60">
+                        <span class="text-[11px] text-slate-500 font-bold block">إجمالي عدد القطع</span>
+                        <span id="statTotalUnitsAnalytics" class="text-base font-extrabold text-slate-800 mt-1 block">0 قطعة</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category Distribution -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+                <h3 class="font-extrabold text-slate-800 text-sm mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-layer-group text-emerald-600"></i> توزيع البضاعة حسب النوع
+                </h3>
+                <div id="categoryBreakdownList" class="space-y-3 text-xs">
+                    <!-- Injected via JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: BACKUP & iPHONE SETTINGS (البيانات والآيفون) -->
+        <div id="tab-settings" class="space-y-3.5 hidden">
+            
+            <!-- Storage Status Card -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                        <i class="fa-solid fa-shield-halved text-emerald-600"></i> حالة حفظ البيانات على الآيفون
+                    </h3>
+                    <span class="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[11px] font-bold">نشط ومؤمّن</span>
+                </div>
+                <p class="text-xs text-slate-600 leading-relaxed">
+                    هذا البرنامج مزود بنظام <strong>حفظ ثلاثي تلقائي</strong> (ذاكرة الآيفون المحلية + قاعدة IndexedDB + الحفظ السحابي). لن تضيع بياناتك أبداً عند إغلاق سفاري أو إعادة تشغيل الهاتف.
+                </p>
+                <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-200/60 text-[11px] text-slate-500 flex items-center justify-between">
+                    <span>آخر عملية حفظ تلقائي:</span>
+                    <span id="lastSavedTimestamp" class="font-bold text-slate-700">الآن</span>
+                </div>
+                <button onclick="openIosGuideModal()" class="w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs active:scale-95 transition">
+                    <i class="fa-brands fa-apple text-sm"></i>
+                    <span>طريقة تثبيت البرنامج كأيقونة على شاشة الآيفون</span>
+                </button>
+            </div>
+
+            <!-- Quick Copy/Paste Backup for iPhone Notes / WhatsApp -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+                <h3 class="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                    <i class="fa-brands fa-whatsapp text-emerald-600 text-base"></i> نسخ احتياطي سريع (للملاحظات أو واتساب)
+                </h3>
+                <p class="text-xs text-slate-500 leading-relaxed">
+                    أسهل طريقة لحفظ نسخة إضافية على الآيفون: اضغط "نسخ كود البضاعة" والصقه في تطبيق <strong>الملاحظات (Notes)</strong> أو أرسله لنفسك في واتساب.
+                </p>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="copyBackupToClipboard()" class="p-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-bold flex flex-col items-center justify-center gap-1.5 active:scale-95 transition">
+                        <i class="fa-solid fa-copy text-base"></i>
+                        <span>نسخ كود البضاعة</span>
+                    </button>
+                    <button onclick="openPasteRestoreModal()" class="p-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-slate-700 text-xs font-bold flex flex-col items-center justify-center gap-1.5 active:scale-95 transition">
+                        <i class="fa-solid fa-paste text-base"></i>
+                        <span>لصق واسترجاع كود</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- File Export / Import -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+                <h3 class="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-file-export text-emerald-600"></i> تصدير واستيراد ملفات (Excel / JSON)
+                </h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="exportToCSV()" class="p-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 text-xs font-bold flex flex-col items-center justify-center gap-1.5 active:scale-95 transition">
+                        <i class="fa-solid fa-file-excel text-base text-emerald-600"></i>
+                        <span>تصدير جدول Excel</span>
+                    </button>
+                    <button onclick="exportToJSON()" class="p-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 text-xs font-bold flex flex-col items-center justify-center gap-1.5 active:scale-95 transition">
+                        <i class="fa-solid fa-download text-base text-sky-600"></i>
+                        <span>تنزيل ملف حفظ JSON</span>
+                    </button>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100">
+                    <label class="block text-xs font-bold text-slate-700 mb-2">استرجاع من ملف محفوظ في "ملفات الآيفون" (Files):</label>
+                    <input type="file" id="importFileInput" accept=".json" class="block w-full text-xs text-slate-500 file:ml-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700">
+                    <button onclick="importFromJSON()" class="w-full mt-2 py-2.5 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-900 active:scale-95 transition">
+                        استعادة البيانات من الملف المختار
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Bottom Navigation Bar (iOS Tab Bar) -->
+    <nav class="fixed bottom-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-xl border-t border-slate-200/80 px-4 pt-2 ios-bottom-nav shadow-lg">
+        <div class="max-w-md mx-auto grid grid-cols-4 gap-1">
+            <button onclick="switchTab('inventory')" id="nav-inventory" class="flex flex-col items-center py-1 text-emerald-600 transition">
+                <i class="fa-solid fa-boxes-stacked text-lg"></i>
+                <span class="text-[11px] font-bold mt-0.5">البضاعة</span>
+            </button>
+            <button onclick="switchTab('history')" id="nav-history" class="flex flex-col items-center py-1 text-slate-400 hover:text-slate-600 transition">
+                <i class="fa-solid fa-clock-rotate-left text-lg"></i>
+                <span class="text-[11px] font-bold mt-0.5">السجل</span>
+            </button>
+            <button onclick="switchTab('analytics')" id="nav-analytics" class="flex flex-col items-center py-1 text-slate-400 hover:text-slate-600 transition">
+                <i class="fa-solid fa-chart-pie text-lg"></i>
+                <span class="text-[11px] font-bold mt-0.5">الجرد</span>
+            </button>
+            <button onclick="switchTab('settings')" id="nav-settings" class="flex flex-col items-center py-1 text-slate-400 hover:text-slate-600 transition">
+                <i class="fa-solid fa-cloud-arrow-up text-lg"></i>
+                <span class="text-[11px] font-bold mt-0.5">الحفظ</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- MODAL 1: Add / Edit Product Bottom Sheet -->
+    <div id="productModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+        <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden ios-sheet">
+            
+            <!-- Grab Handle for iOS feel -->
+            <div class="w-10 h-1.5 bg-slate-200 rounded-full mx-auto mt-2.5 sm:hidden"></div>
+
+            <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <h3 id="modalTitle" class="font-extrabold text-slate-900 text-base">إضافة صنف جديد</h3>
+                <button onclick="closeModal()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <form id="productForm" onsubmit="handleSaveProduct(event)" class="p-4 overflow-y-auto space-y-3.5 flex-1 text-xs font-bold">
+                <input type="hidden" id="prodId">
+
+                <!-- Product Name -->
+                <div>
+                    <label class="block text-slate-700 mb-1">اسم الصنف / البضاعة <span class="text-rose-500">*</span></label>
+                    <input type="text" id="prodName" required placeholder="مثال: قميص كاجوال، عطر عود، شاحن آيفون"
+                        class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:bg-white">
+                </div>
+
+                <!-- Category & Size/Variant -->
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="block text-slate-700 mb-1">النوع / القسم <span class="text-rose-500">*</span></label>
+                        <input type="text" id="prodCategory" required placeholder="اختر أو اكتب نوعاً" list="categoryDatalist"
+                            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:bg-white">
+                        <datalist id="categoryDatalist">
+                            <option value="ملابس">
+                            <option value="أحذية">
+                            <option value="عطور وتجميل">
+                            <option value="إلكترونيات">
+                            <option value="إكسسوارات">
+                            <option value="حقائب">
+                            <option value="مواد غذائية">
+                        </datalist>
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-700 mb-1">المقاس / اللون / الوصف</label>
+                        <input type="text" id="prodVariant" placeholder="مثال: XL، أسود، 100 مل"
+                            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:bg-white">
+                    </div>
+                </div>
+
+                <!-- Quantity & Low Alert -->
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="block text-slate-700 mb-1">الكمية المتوفرة <span class="text-rose-500">*</span></label>
+                        <input type="number" inputmode="numeric" min="0" id="prodQuantity" required placeholder="0"
+                            class="w-full bg-emerald-50/50 border border-emerald-300 rounded-xl px-3 py-2.5 text-slate-900 font-extrabold focus:outline-hidden focus:border-emerald-600 focus:bg-white">
+                    </div>
+                    <div>
+                        <label class="block text-slate-700 mb-1">التنبيه عند وصول الكمية لـ</label>
+                        <input type="number" inputmode="numeric" min="0" id="prodMinAlert" value="3" placeholder="3"
+                            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:bg-white">
+                    </div>
+                </div>
+
+                <!-- Price & Barcode -->
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="block text-slate-700 mb-1">سعر البيع (ر.ع)</label>
+                        <input type="number" inputmode="decimal" step="0.001" min="0" id="prodPrice" placeholder="0.000"
+                            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:bg-white">
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-700 mb-1">الباركود / الكود</label>
+                        <div class="flex gap-1.5">
+                            <input type="text" id="prodBarcode" placeholder="اختياري"
+                                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2.5 text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:bg-white">
+                            <button type="button" onclick="openScannerModal(true)" class="px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl flex items-center justify-center shrink-0">
+                                <i class="fa-solid fa-camera"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-3 pb-4 flex gap-2">
+                    <button type="button" onclick="closeModal()" class="w-1/3 py-3.5 bg-slate-100 text-slate-700 rounded-2xl font-bold hover:bg-slate-200 active:scale-95 transition">
+                        إلغاء
+                    </button>
+                    <button type="submit" class="w-2/3 py-3.5 bg-emerald-600 text-white rounded-2xl font-extrabold hover:bg-emerald-700 shadow-md shadow-emerald-600/25 active:scale-95 transition">
+                        حفظ البيانات في الهاتف
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: Custom Delete Confirmation Modal (No browser confirm) -->
+    <div id="deleteConfirmModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+        <div class="bg-white w-full max-w-xs rounded-3xl p-5 text-center shadow-2xl space-y-4">
+            <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto text-xl">
+                <i class="fa-solid fa-trash-can"></i>
+            </div>
+            <div>
+                <h4 class="font-extrabold text-slate-900 text-base">حذف الصنف نهائياً؟</h4>
+                <p id="deleteModalItemName" class="text-xs text-slate-500 mt-1 font-semibold"></p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="closeDeleteModal()" class="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">تراجع</button>
+                <button id="confirmDeleteBtn" class="flex-1 py-2.5 bg-rose-600 text-white rounded-xl text-xs font-bold shadow-sm">نعم، احذف</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: iPhone Install Guide ("Add to Home Screen") -->
+    <div id="iosGuideModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+        <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl space-y-4 ios-sheet">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <i class="fa-brands fa-apple text-xl text-slate-900"></i>
+                    <h4 class="font-extrabold text-slate-900 text-sm">تثبيت البرنامج على شاشة الآيفون</h4>
+                </div>
+                <button onclick="closeIosGuideModal()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-600 leading-relaxed font-medium">
+                لجعل هذا البرنامج يعمل كتطبيق مستقل بملء الشاشة على هاتفك الآيفون ويحتفظ ببياناتك دائماً، اتبع هاتين الخطوتين في متصفح <strong>Safari</strong>:
+            </p>
+
+            <div class="space-y-2.5 text-xs">
+                <div class="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200/70">
+                    <div class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 font-bold text-base">
+                        <i class="fa-solid fa-arrow-up-from-bracket"></i>
+                    </div>
+                    <div>
+                        <p class="font-extrabold text-slate-800">1. اضغط على زر المشاركة (Share)</p>
+                        <p class="text-slate-500 text-[11px] mt-0.5">الموجود في الشريط السفلي لمتصفح سفاري بالآيفون.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200/70">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 font-bold text-base">
+                        <i class="fa-regular fa-square-plus"></i>
+                    </div>
+                    <div>
+                        <p class="font-extrabold text-slate-800">2. اختر "إضافة إلى الشاشة الرئيسية"</p>
+                        <p class="text-slate-500 text-[11px] mt-0.5">(Add to Home Screen) ثم اضغط "إضافة" في الأعلى.</p>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="closeIosGuideModal()" class="w-full py-3 bg-emerald-600 text-white rounded-2xl text-xs font-extrabold shadow-md">
+                فهمت، شكراً!
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL 4: Paste Backup Code Modal -->
+    <div id="pasteRestoreModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-4 shadow-2xl space-y-3">
+            <div class="flex items-center justify-between">
+                <h4 class="font-extrabold text-slate-900 text-sm">استرجاع البيانات من كود منسوخ</h4>
+                <button onclick="closePasteRestoreModal()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-500">الصق كود النسخة الاحتياطية الذي قمت بنسخه سابقاً هنا:</p>
+            <textarea id="pasteBackupTextarea" rows="5" placeholder='[{"id":"...","name":"..."}]' class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-mono focus:outline-hidden focus:border-emerald-500"></textarea>
+            <div class="flex gap-2">
+                <button onclick="closePasteRestoreModal()" class="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">إلغاء</button>
+                <button onclick="restoreFromPastedCode()" class="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold">استرجاع الآن</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 5: Camera Barcode Scanner -->
+    <div id="scannerModal" class="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-4 flex flex-col items-center">
+            <div class="w-full flex justify-between items-center mb-3">
+                <h4 class="font-extrabold text-slate-800 text-sm">مسح الباركود بكاميرا الآيفون</h4>
+                <button onclick="closeScannerModal()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div id="reader" class="w-full rounded-2xl overflow-hidden bg-slate-900 min-h-[240px]"></div>
+            <p class="text-xs text-slate-500 text-center mt-3">
+                وجّه كاميرا الآيفون نحو الباركود ليتم قراءته تلقائياً.
+            </p>
+        </div>
+    </div>
+
+    <!-- Floating Notification Toast -->
+    <div id="toast" class="fixed top-14 left-1/2 -translate-x-1/2 z-50 hidden bg-slate-900/95 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl text-xs font-bold shadow-xl flex items-center gap-2 whitespace-nowrap transition-all duration-300">
+        <span id="toastIcon"></span>
+        <span id="toastMessage"></span>
+    </div>
+
+    <!-- Application Logic + Triple-Layer Persistence (LocalStorage + IndexedDB + Firebase Cloud) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Persistence Keys ---
+        const STORAGE_KEY = 'shop_inventory_iphone_v2';
+        const HISTORY_KEY = 'shop_inventory_history_v2';
+        const IDB_NAME = 'ShopInventoryiPhoneDB';
+        const IDB_STORE = 'stateStore';
+
+        // --- Application State ---
+        let inventory = [];
+        let historyLog = [];
+        let selectedCategory = 'all';
+        let stockStatusFilter = 'all'; // 'all', 'low', 'out'
+        let itemPendingDelete = null;
+        let html5QrScanner = null;
+        let scanTargetInput = false;
+
+        // --- Firebase Cloud State ---
+        let db = null;
+        let auth = null;
+        let currentUser = null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'iphone-shop-inventory-app';
+
+        // Default Starter Inventory for a Shop
+        const DEFAULT_ITEMS = [
+            { id: '1', name: 'تيشيرت قطني بولو رجالي', category: 'ملابس', variant: 'مقاس L - كحلي', quantity: 18, minAlert: 5, price: 6.500, barcode: '628100101' },
+            { id: '2', name: 'عطر عود ملكي فاخر', category: 'عطور وتجميل', variant: '100 مل', quantity: 3, minAlert: 4, price: 14.000, barcode: '628100102' },
+            { id: '3', name: 'شاحن جداري سريع 20W للآيفون', category: 'إلكترونيات', variant: 'Type-C أبيض', quantity: 12, minAlert: 5, price: 4.500, barcode: '628100103' },
+            { id: '4', name: 'حذاء رياضي مريح للمشي', category: 'أحذية', variant: 'مقاس 42 - أسود', quantity: 0, minAlert: 2, price: 11.200, barcode: '628100104' }
+        ];
+
+        // --- 1. IndexedDB Helper (Resilient iPhone Storage) ---
+        function openIndexedDB() {
+            return new Promise((resolve, reject) => {
+                if (!window.indexedDB) return reject('No IDB');
+                const req = indexedDB.open(IDB_NAME, 1);
+                req.onupgradeneeded = (e) => {
+                    const idb = e.target.result;
+                    if (!idb.objectStoreNames.contains(IDB_STORE)) {
+                        idb.createObjectStore(IDB_STORE);
+                    }
+                };
+                req.onsuccess = (e) => resolve(e.target.result);
+                req.onerror = (e) => reject(e.target.error);
+            });
+        }
+
+        async function saveToIndexedDB(key, val) {
+            try {
+                const idb = await openIndexedDB();
+                const tx = idb.transaction(IDB_STORE, 'readwrite');
+                tx.objectStore(IDB_STORE).put(val, key);
+            } catch (e) {
+                // Silent fallback to localStorage
+            }
+        }
+
+        async function readFromIndexedDB(key) {
+            try {
+                const idb = await openIndexedDB();
+                return new Promise((resolve) => {
+                    const tx = idb.transaction(IDB_STORE, 'readonly');
+                    const req = tx.objectStore(IDB_STORE).get(key);
+                    req.onsuccess = () => resolve(req.result || null);
+                    req.onerror = () => resolve(null);
+                });
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // --- 2. Load & Save All Layers (LocalStorage + IndexedDB + Cloud) ---
+        async function initializeData() {
+            // Ask iOS Safari for persistent storage quota
+            if (navigator.storage && navigator.storage.persist) {
+                navigator.storage.persist().catch(() => {});
+            }
+
+            let loadedInv = null;
+            let loadedHist = null;
+
+            // Layer A: Try LocalStorage first (instant)
+            try {
+                const rawInv = localStorage.getItem(STORAGE_KEY);
+                const rawHist = localStorage.getItem(HISTORY_KEY);
+                if (rawInv) loadedInv = JSON.parse(rawInv);
+                if (rawHist) loadedHist = JSON.parse(rawHist);
+            } catch (e) {}
+
+            // Layer B: If LocalStorage was cleared by iOS, recover from IndexedDB
+            if (!loadedInv) {
+                const idbInv = await readFromIndexedDB(STORAGE_KEY);
+                const idbHist = await readFromIndexedDB(HISTORY_KEY);
+                if (idbInv && Array.isArray(idbInv)) loadedInv = idbInv;
+                if (idbHist && Array.isArray(idbHist)) loadedHist = idbHist;
+            }
+
+            if (loadedInv && Array.isArray(loadedInv)) {
+                inventory = loadedInv;
+            } else {
+                inventory = DEFAULT_ITEMS;
+            }
+
+            if (loadedHist && Array.isArray(loadedHist)) {
+                historyLog = loadedHist;
+            } else {
+                historyLog = [];
+            }
+
+            renderAll();
+            await persistAllData(false);
+            initFirebaseCloudSync();
+        }
+
+        async function persistAllData(fromCloud = false) {
+            const nowTime = new Date().toLocaleTimeString('ar-OM', { hour: '2-digit', minute: '2-digit' });
+            
+            // 1. Save to LocalStorage
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(inventory));
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(historyLog));
+            } catch (e) {}
+
+            // 2. Save to IndexedDB
+            await saveToIndexedDB(STORAGE_KEY, inventory);
+            await saveToIndexedDB(HISTORY_KEY, historyLog);
+
+            // 3. Save to Firebase Firestore Cloud if available
+            if (!fromCloud && db && currentUser) {
+                try {
+                    updateSyncBadge('syncing');
+                    const userDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'shopData', 'mainStore');
+                    await setDoc(userDocRef, {
+                        inventoryJson: JSON.stringify(inventory),
+                        historyJson: JSON.stringify(historyLog.slice(0, 60)),
+                        updatedAt: Date.now()
+                    }, { merge: true });
+                    updateSyncBadge('cloud');
+                } catch (err) {
+                    updateSyncBadge('local');
+                }
+            } else if (!fromCloud) {
+                updateSyncBadge('local');
+            }
+
+            const tsEl = document.getElementById('lastSavedTimestamp');
+            if (tsEl) tsEl.textContent = `اليوم الساعة ${nowTime}`;
+        }
+
+        // --- 3. Firebase Cloud Initialization (Rule 1, 2, 3 compliant) ---
+        async function initFirebaseCloudSync() {
+            try {
+                if (typeof __firebase_config === 'undefined' || !__firebase_config) {
+                    updateSyncBadge('local');
+                    return;
+                }
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // RULE 3: Auth before queries
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (!user) return;
+                    currentUser = user;
+
+                    // RULE 1: Strict Path `/artifacts/{appId}/users/{userId}/shopData/mainStore`
+                    const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'shopData', 'mainStore');
+
+                    // Initial check from cloud
+                    try {
+                        const snap = await getDoc(userDocRef);
+                        if (snap.exists()) {
+                            const data = snap.data();
+                            if (data.inventoryJson) {
+                                const cloudInv = JSON.parse(data.inventoryJson);
+                                if (Array.isArray(cloudInv) && cloudInv.length > 0) {
+                                    inventory = cloudInv;
+                                }
+                            }
+                            if (data.historyJson) {
+                                const cloudHist = JSON.parse(data.historyJson);
+                                if (Array.isArray(cloudHist)) historyLog = cloudHist;
+                            }
+                            await persistAllData(true);
+                            renderAll();
+                            updateSyncBadge('cloud');
+                        } else {
+                            // Upload current local inventory to cloud for first time
+                            await persistAllData(false);
+                        }
+                    } catch (e) {
+                        updateSyncBadge('local');
+                    }
+
+                    // Live snapshot listener with error callback
+                    onSnapshot(userDocRef, (docSnap) => {
+                        if (!docSnap.exists()) return;
+                        const data = docSnap.data();
+                        if (data.inventoryJson) {
+                            try {
+                                const remoteInv = JSON.parse(data.inventoryJson);
+                                if (JSON.stringify(remoteInv) !== JSON.stringify(inventory)) {
+                                    inventory = remoteInv;
+                                    if (data.historyJson) historyLog = JSON.parse(data.historyJson);
+                                    persistAllData(true);
+                                    renderAll();
+                                }
+                                updateSyncBadge('cloud');
+                            } catch (e) {}
+                        }
+                    }, (error) => {
+                        updateSyncBadge('local');
+                    });
+                });
+            } catch (e) {
+                updateSyncBadge('local');
+            }
+        }
+
+        function updateSyncBadge(state) {
+            const dot = document.getElementById('syncDot');
+            const text = document.getElementById('syncText');
+            if (!dot || !text) return;
+
+            if (state === 'cloud') {
+                dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500';
+                text.textContent = 'محفوظ بالآيفون والسحابة ✓';
+            } else if (state === 'syncing') {
+                dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping';
+                text.textContent = 'جاري الحفظ التلقائي...';
+            } else {
+                dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500';
+                text.textContent = 'محفوظ على الآيفون ✓';
+            }
+        }
+
+        // --- 4. UI Rendering & Interactions ---
+        function renderAll() {
+            renderCategoryFilters();
+            renderItems();
+            updateDashboard();
+            renderHistoryLog();
+            renderAnalytics();
+        }
+
+        function renderCategoryFilters() {
+            const container = document.getElementById('categoryFilterContainer');
+            const categories = ['all', ...new Set(inventory.map(item => item.category).filter(Boolean))];
+
+            container.innerHTML = categories.map(cat => {
+                const isSelected = selectedCategory === cat;
+                const count = cat === 'all' ? inventory.length : inventory.filter(i => i.category === cat).length;
+                const label = cat === 'all' ? `الكل (${count})` : `${cat} (${count})`;
+                return `
+                    <button onclick="window.setCategoryFilter('${cat}')" 
+                        class="px-3 py-1.5 rounded-xl whitespace-nowrap transition-all active:scale-95 ${
+                            isSelected 
+                            ? 'bg-emerald-600 text-white shadow-xs' 
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }">
+                        ${label}
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function getStockStatus(item) {
+            const qty = Number(item.quantity) || 0;
+            const min = Number(item.minAlert) ?? 3;
+
+            if (qty <= 0) {
+                return { label: 'نفذت الكمية', color: 'bg-rose-50 text-rose-600 border-rose-200', dot: 'bg-rose-500' };
+            } else if (qty <= min) {
+                return { label: 'قارب على النفاد', color: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
+            } else {
+                return { label: 'متوفر', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' };
+            }
+        }
+
+        function renderItems() {
+            const query = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+            document.getElementById('clearSearchBtn').classList.toggle('hidden', query.length === 0);
+
+            // Highlight active top filter card
+            ['all', 'low', 'out'].forEach(type => {
+                const card = document.getElementById(`card-filter-${type}`);
+                if (!card) return;
+                if (stockStatusFilter === type) {
+                    card.className = 'bg-emerald-50/40 p-2.5 rounded-2xl border-2 border-slate-900 shadow-2xs flex flex-col items-center justify-center text-center transition active:scale-95';
+                } else {
+                    card.className = 'bg-white p-2.5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col items-center justify-center text-center transition active:scale-95';
+                }
+            });
+
+            // Filter banner visibility
+            const banner = document.getElementById('activeFilterBanner');
+            const bannerText = document.getElementById('activeFilterText');
+            if (stockStatusFilter !== 'all' || selectedCategory !== 'all') {
+                banner.classList.remove('hidden');
+                banner.classList.add('flex');
+                const statusMap = { all: 'كل الحالات', low: 'البضاعة التي قاربت على النفاد فقط', out: 'البضاعة النافذة (رصيد 0) فقط' };
+                bannerText.textContent = `عرض: ${selectedCategory === 'all' ? '' : selectedCategory + ' • '} ${statusMap[stockStatusFilter]}`;
+            } else {
+                banner.classList.add('hidden');
+                banner.classList.remove('flex');
+            }
+
+            const container = document.getElementById('itemsContainer');
+            const emptyState = document.getElementById('emptyState');
+
+            const filtered = inventory.filter(item => {
+                if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
+
+                const qty = Number(item.quantity) || 0;
+                const min = Number(item.minAlert) ?? 3;
+                if (stockStatusFilter === 'low' && (qty <= 0 || qty > min)) return false;
+                if (stockStatusFilter === 'out' && qty > 0) return false;
+
+                if (query) {
+                    const matchName = (item.name || '').toLowerCase().includes(query);
+                    const matchVar = (item.variant || '').toLowerCase().includes(query);
+                    const matchBarcode = (item.barcode || '').toLowerCase().includes(query);
+                    const matchCat = (item.category || '').toLowerCase().includes(query);
+                    if (!matchName && !matchVar && !matchBarcode && !matchCat) return false;
+                }
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+
+            container.innerHTML = filtered.map(item => {
+                const status = getStockStatus(item);
+                const formattedPrice = item.price ? Number(item.price).toFixed(3) : null;
+
+                return `
+                <div class="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-2xs transition">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="flex-1 min-w-0">
+                            <!-- Status & Category Badges -->
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-[11px] px-2 py-0.5 rounded-lg font-bold border ${status.color} flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full ${status.dot}"></span>
+                                    ${status.label}
+                                </span>
+                                <span class="text-[11px] px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-bold">
+                                    ${item.category || 'عام'}
+                                </span>
+                                ${item.variant ? `
+                                <span class="text-[11px] px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 font-bold border border-indigo-100">
+                                    ${item.variant}
+                                </span>` : ''}
+                            </div>
+
+                            <!-- Product Title -->
+                            <h4 class="text-sm font-extrabold text-slate-900 mt-1.5 leading-snug">${item.name}</h4>
+
+                            <!-- Price & Barcode Info -->
+                            <div class="flex items-center gap-3 text-xs text-slate-400 mt-1">
+                                ${formattedPrice ? `<span class="text-emerald-700 font-extrabold">${formattedPrice} ر.ع</span>` : ''}
+                                ${item.barcode ? `<span class="font-mono text-[11px]"><i class="fa-solid fa-barcode ml-1"></i>${item.barcode}</span>` : ''}
+                            </div>
+                        </div>
+
+                        <!-- Edit & Delete Action Icons -->
+                        <div class="flex items-center gap-1">
+                            <button onclick="window.openModal('edit', '${item.id}')" title="تعديل" class="w-8 h-8 rounded-xl bg-slate-50 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center active:scale-90 transition">
+                                <i class="fa-solid fa-pen text-xs"></i>
+                            </button>
+                            <button onclick="window.askDeleteItem('${item.id}')" title="حذف" class="w-8 h-8 rounded-xl bg-slate-50 text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center active:scale-90 transition">
+                                <i class="fa-solid fa-trash text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Bottom Quantity Control Bar -->
+                    <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <div class="flex items-baseline gap-1.5">
+                            <span class="text-xs text-slate-500 font-bold">المتوفر:</span>
+                            <span id="qty-badge-${item.id}" class="text-lg font-extrabold ${item.quantity <= 0 ? 'text-rose-600' : 'text-slate-900'}">
+                                ${item.quantity}
+                            </span>
+                            <span class="text-[11px] text-slate-400 font-semibold">قطعة</span>
+                        </div>
+
+                        <!-- Quick Sale & Stepper Controls -->
+                        <div class="flex items-center gap-1.5">
+                            <button onclick="window.adjustStock('${item.id}', -1, 'بيع سريع')" 
+                                class="px-2.5 h-9 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 text-xs font-extrabold flex items-center gap-1 active:scale-90 transition">
+                                <i class="fa-solid fa-cart-arrow-down text-[11px]"></i>
+                                <span>بيع 1</span>
+                            </button>
+
+                            <div class="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+                                <button onclick="window.adjustStock('${item.id}', -1, 'سحب')" class="w-8 h-8 rounded-lg bg-white shadow-2xs text-slate-700 hover:text-rose-600 flex items-center justify-center font-bold active:scale-90 transition">
+                                    <i class="fa-solid fa-minus text-xs"></i>
+                                </button>
+                                <span class="w-8 text-center text-xs font-extrabold text-slate-800">${item.quantity}</span>
+                                <button onclick="window.adjustStock('${item.id}', 1, 'توريد')" class="w-8 h-8 rounded-lg bg-emerald-600 shadow-2xs text-white hover:bg-emerald-700 flex items-center justify-center font-bold active:scale-90 transition">
+                                    <i class="fa-solid fa-plus text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        // --- 5. Stock Adjustment & Activity Logging ---
+        async function adjustStock(id, delta, reason = 'تعديل سريع') {
+            const index = inventory.findIndex(i => i.id === id);
+            if (index === -1) return;
+
+            const item = inventory[index];
+            const current = Number(item.quantity) || 0;
+            const newQty = Math.max(0, current + delta);
+
+            if (current === newQty && delta < 0) {
+                showToast(`الكمية صفر بالفعل لـ ${item.name}`, 'warning');
+                return;
+            }
+
+            inventory[index].quantity = newQty;
+
+            // Log transaction
+            addHistoryEntry(item.name, item.variant || item.category, delta, newQty, reason);
+
+            renderItems();
+            updateDashboard();
+            renderHistoryLog();
+
+            // Animate quantity number
+            const badge = document.getElementById(`qty-badge-${id}`);
+            if (badge) {
+                badge.classList.remove('animate-pop');
+                void badge.offsetWidth;
+                badge.classList.add('animate-pop');
+            }
+
+            await persistAllData(false);
+
+            if (newQty === 0) {
+                showToast(`تنبيه: نفذت كمية (${item.name}) بالكامل!`, 'warning');
+            } else if (delta < 0) {
+                showToast(`تم خصم 1 من ${item.name} (المتبقي: ${newQty})`, 'info');
+            } else {
+                showToast(`تمت إضافة 1 إلى ${item.name} (المتوفر: ${newQty})`, 'success');
+            }
+        }
+
+        function addHistoryEntry(itemName, variant, delta, newQty, reason) {
+            const entry = {
+                id: Date.now().toString() + Math.random().toString(36).slice(2, 5),
+                itemName,
+                variant: variant || '',
+                delta,
+                newQty,
+                reason,
+                timestamp: new Date().toLocaleString('ar-OM', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })
+            };
+            historyLog.unshift(entry);
+            if (historyLog.length > 100) historyLog = historyLog.slice(0, 100);
+        }
+
+        function renderHistoryLog() {
+            const container = document.getElementById('historyListContainer');
+            if (!container) return;
+
+            if (historyLog.length === 0) {
+                container.innerHTML = `
+                    <div class="py-10 text-center text-slate-400 text-xs font-semibold">
+                        لا توجد حركات مسجلة بعد. عند بيع أو إضافة أي قطعة ستظهر هنا فوراً.
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = historyLog.map(entry => {
+                const isPlus = entry.delta > 0;
+                return `
+                <div class="py-2.5 flex items-center justify-between gap-2 text-xs">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 font-bold ${isPlus ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}">
+                            ${isPlus ? '+' + entry.delta : entry.delta}
+                        </div>
+                        <div class="min-w-0">
+                            <p class="font-extrabold text-slate-800 truncate">${entry.itemName}</p>
+                            <p class="text-[11px] text-slate-400 font-medium">${entry.reason} ${entry.variant ? '• ' + entry.variant : ''} • الرصيد أصبح: <strong>${entry.newQty}</strong></p>
+                        </div>
+                    </div>
+                    <span class="text-[10px] text-slate-400 font-semibold whitespace-nowrap">${entry.timestamp}</span>
+                </div>
+                `;
+            }).join('');
+        }
+
+        async function clearHistoryLog() {
+            historyLog = [];
+            renderHistoryLog();
+            await persistAllData(false);
+            showToast('تم مسح سجل الحركات', 'info');
+        }
+
+        // --- 6. Dashboard & Analytics ---
+        function updateDashboard() {
+            const totalItems = inventory.length;
+            const totalUnits = inventory.reduce((acc, cur) => acc + (Number(cur.quantity) || 0), 0);
+            const lowStockCount = inventory.filter(i => {
+                const q = Number(i.quantity) || 0;
+                const min = Number(i.minAlert) ?? 3;
+                return q > 0 && q <= min;
+            }).length;
+            const outStockCount = inventory.filter(i => (Number(i.quantity) || 0) <= 0).length;
+
+            document.getElementById('statTotalItems').textContent = totalItems;
+            document.getElementById('statTotalUnitsSub').textContent = `${totalUnits} قطعة`;
+            document.getElementById('statLowStock').textContent = lowStockCount;
+            document.getElementById('statOutStockCard').textContent = outStockCount;
+            document.getElementById('headerSummary').textContent = `${totalItems} صنف مسجل • إجمالي ${totalUnits} قطعة بالمحل`;
+        }
+
+        function renderAnalytics() {
+            let totalValue = 0;
+            let totalUnits = 0;
+            const catMap = {};
+
+            inventory.forEach(item => {
+                const qty = Number(item.quantity) || 0;
+                const price = Number(item.price) || 0;
+                totalValue += (qty * price);
+                totalUnits += qty;
+
+                const cat = item.category || 'أخرى';
+                if (!catMap[cat]) catMap[cat] = { count: 0, units: 0, value: 0 };
+                catMap[cat].count++;
+                catMap[cat].units += qty;
+                catMap[cat].value += (qty * price);
+            });
+
+            document.getElementById('statTotalValue').textContent = totalValue.toFixed(3) + ' ر.ع';
+            document.getElementById('statTotalUnitsAnalytics').textContent = totalUnits + ' قطعة';
+
+            const breakdownContainer = document.getElementById('categoryBreakdownList');
+            const safeTotalUnits = totalUnits || 1;
+
+            breakdownContainer.innerHTML = Object.entries(catMap).map(([cat, data]) => {
+                const percentage = Math.round((data.units / safeTotalUnits) * 100);
+                return `
+                <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
+                    <div class="flex justify-between items-center text-slate-800">
+                        <span class="font-extrabold">${cat} <span class="text-slate-400 font-semibold">(${data.count} صنف)</span></span>
+                        <span class="text-emerald-700 font-extrabold">${data.units} قطعة (${data.value.toFixed(3)} ر.ع)</span>
+                    </div>
+                    <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                        <div class="bg-emerald-600 h-full rounded-full" style="width: ${percentage}%"></div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        // --- 7. Add / Edit / Delete Modals ---
+        function openModal(mode, id = null) {
+            const modal = document.getElementById('productModal');
+            const form = document.getElementById('productForm');
+            const modalTitle = document.getElementById('modalTitle');
+
+            form.reset();
+            document.getElementById('prodId').value = '';
+
+            if (mode === 'edit' && id) {
+                const item = inventory.find(i => i.id === id);
+                if (!item) return;
+                modalTitle.textContent = 'تعديل بيانات الصنف';
+                document.getElementById('prodId').value = item.id;
+                document.getElementById('prodName').value = item.name || '';
+                document.getElementById('prodCategory').value = item.category || '';
+                document.getElementById('prodVariant').value = item.variant || '';
+                document.getElementById('prodQuantity').value = item.quantity;
+                document.getElementById('prodMinAlert').value = item.minAlert ?? 3;
+                document.getElementById('prodPrice').value = item.price || '';
+                document.getElementById('prodBarcode').value = item.barcode || '';
+            } else {
+                modalTitle.textContent = 'إضافة صنف جديد للمحل';
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('productModal').classList.add('hidden');
+        }
+
+        async function handleSaveProduct(e) {
+            e.preventDefault();
+            const id = document.getElementById('prodId').value;
+            const name = document.getElementById('prodName').value.trim();
+            const category = document.getElementById('prodCategory').value.trim() || 'عام';
+            const variant = document.getElementById('prodVariant').value.trim();
+            const quantity = parseInt(document.getElementById('prodQuantity').value) || 0;
+            const minAlert = parseInt(document.getElementById('prodMinAlert').value) || 0;
+            const price = parseFloat(document.getElementById('prodPrice').value) || 0;
+            const barcode = document.getElementById('prodBarcode').value.trim();
+
+            if (id) {
+                const index = inventory.findIndex(i => i.id === id);
+                if (index !== -1) {
+                    const oldQty = Number(inventory[index].quantity) || 0;
+                    const diff = quantity - oldQty;
+                    inventory[index] = { ...inventory[index], name, category, variant, quantity, minAlert, price, barcode };
+                    if (diff !== 0) {
+                        addHistoryEntry(name, variant || category, diff, quantity, 'تعديل جرد');
+                    }
+                    showToast('تم حفظ التعديلات بنجاح ✓', 'success');
+                }
+            } else {
+                const newItem = {
+                    id: Date.now().toString(),
+                    name,
+                    category,
+                    variant,
+                    quantity,
+                    minAlert,
+                    price,
+                    barcode
+                };
+                inventory.unshift(newItem);
+                addHistoryEntry(name, variant || category, quantity, quantity, 'إضافة صنف جديد');
+                showToast('تمت إضافة الصنف وحفظه بالهاتف ✓', 'success');
+            }
+
+            closeModal();
+            renderAll();
+            await persistAllData(false);
+        }
+
+        function askDeleteItem(id) {
+            const item = inventory.find(i => i.id === id);
+            if (!item) return;
+            itemPendingDelete = id;
+            document.getElementById('deleteModalItemName').textContent = `${item.name} (${item.variant || item.category})`;
+            document.getElementById('deleteConfirmModal').classList.remove('hidden');
+
+            document.getElementById('confirmDeleteBtn').onclick = async () => {
+                inventory = inventory.filter(i => i.id !== itemPendingDelete);
+                addHistoryEntry(item.name, item.variant || item.category, -item.quantity, 0, 'حذف الصنف');
+                closeDeleteModal();
+                renderAll();
+                await persistAllData(false);
+                showToast('تم حذف الصنف من المخزون', 'info');
+            };
+        }
+
+        function closeDeleteModal() {
+            itemPendingDelete = null;
+            document.getElementById('deleteConfirmModal').classList.add('hidden');
+        }
+
+        // --- 8. Backup, Clipboard Copy/Paste & Export ---
+        function copyBackupToClipboard() {
+            const backupPayload = JSON.stringify(inventory);
+            const tempInput = document.createElement('textarea');
+            tempInput.value = backupPayload;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            showToast('تم نسخ كود البضاعة! الصقه في الملاحظات أو واتساب ✓', 'success');
+        }
+
+        function openPasteRestoreModal() {
+            document.getElementById('pasteBackupTextarea').value = '';
+            document.getElementById('pasteRestoreModal').classList.remove('hidden');
+        }
+
+        function closePasteRestoreModal() {
+            document.getElementById('pasteRestoreModal').classList.add('hidden');
+        }
+
+        async function restoreFromPastedCode() {
+            const raw = document.getElementById('pasteBackupTextarea').value.trim();
+            if (!raw) {
+                showToast('يرجى لصق الكود أولاً', 'error');
+                return;
+            }
+            try {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    inventory = parsed;
+                    closePasteRestoreModal();
+                    renderAll();
+                    await persistAllData(false);
+                    switchTab('inventory');
+                    showToast(`تم استرجاع ${parsed.length} صنف بنجاح ✓`, 'success');
+                } else {
+                    showToast('الكود غير صالح!', 'error');
+                }
+            } catch (e) {
+                showToast('تأكد من نسخ الكود كاملاً بشكل صحيح', 'error');
+            }
+        }
+
+        function exportToJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(inventory, null, 2));
+            const link = document.createElement('a');
+            link.setAttribute("href", dataStr);
+            link.setAttribute("download", `مخزون_المحل_${new Date().toISOString().slice(0,10)}.json`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            showToast("تم تجهيز ملف النسخة الاحتياطية", "success");
+        }
+
+        function exportToCSV() {
+            if (inventory.length === 0) {
+                showToast("لا توجد بضائع لتصديرها", "info");
+                return;
+            }
+            const headers = ["الباركود", "اسم الصنف", "النوع", "المقاس/الوصف", "الكمية المتوفرة", "حد التنبيه", "السعر (ر.ع)"];
+            const rows = inventory.map(i => [
+                `"${i.barcode || ''}"`,
+                `"${i.name || ''}"`,
+                `"${i.category || ''}"`,
+                `"${i.variant || ''}"`,
+                i.quantity,
+                i.minAlert ?? 3,
+                Number(i.price || 0).toFixed(3)
+            ]);
+
+            const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `جرد_المحل_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            showToast("تم تصدير جدول Excel بنجاح ✓", "success");
+        }
+
+        function importFromJSON() {
+            const fileInput = document.getElementById('importFileInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                showToast("الرجاء اختيار ملف النسخة أولاً", "error");
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (Array.isArray(imported)) {
+                        inventory = imported;
+                        renderAll();
+                        await persistAllData(false);
+                        showToast(`تم استرجاع ${imported.length} صنف بنجاح ✓`, "success");
+                        switchTab('inventory');
+                    } else {
+                        showToast("تنسيق الملف غير صالح", "error");
+                    }
+                } catch (err) {
+                    showToast("تعذر قراءة الملف المختار", "error");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // --- 9. Camera Barcode Scanner (iPhone Safari compatible) ---
+        function openScannerModal(forInput = false) {
+            scanTargetInput = forInput;
+            document.getElementById('scannerModal').classList.remove('hidden');
+
+            try {
+                html5QrScanner = new Html5Qrcode("reader");
+                html5QrScanner.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 220, height: 150 } },
+                    (decodedText) => {
+                        handleBarcodeDetected(decodedText);
+                        closeScannerModal();
+                    },
+                    () => {}
+                ).catch(() => {
+                    showToast("يرجى السماح للكاميرا من إعدادات سفاري بالآيفون", "error");
+                    closeScannerModal();
+                });
+            } catch (err) {
+                closeScannerModal();
+            }
+        }
+
+        function closeScannerModal() {
+            if (html5QrScanner) {
+                html5QrScanner.stop().then(() => {
+                    html5QrScanner.clear();
+                    html5QrScanner = null;
+                }).catch(() => {
+                    html5QrScanner = null;
+                });
+            }
+            document.getElementById('scannerModal').classList.add('hidden');
+        }
+
+        function handleBarcodeDetected(code) {
+            if (scanTargetInput) {
+                const input = document.getElementById('prodBarcode');
+                if (input) input.value = code;
+                showToast(`تم قراءة الباركود: ${code}`, "success");
+            } else {
+                const item = inventory.find(i => i.barcode === code);
+                if (item) {
+                    document.getElementById('searchInput').value = code;
+                    renderItems();
+                    showToast(`تم العثور على: ${item.name}`, "success");
+                } else {
+                    showToast(`صنف جديد! جاري فتح نافذة الإضافة (${code})`, "info");
+                    openModal('add');
+                    setTimeout(() => {
+                        document.getElementById('prodBarcode').value = code;
+                    }, 120);
+                }
+            }
+        }
+
+        // --- 10. Navigation & Utility Helpers ---
+        function switchTab(tabId) {
+            ['inventory', 'history', 'analytics', 'settings'].forEach(id => {
+                document.getElementById(`tab-${id}`).classList.toggle('hidden', id !== tabId);
+                const navBtn = document.getElementById(`nav-${id}`);
+                if (id === tabId) {
+                    navBtn.classList.remove('text-slate-400');
+                    navBtn.classList.add('text-emerald-600');
+                } else {
+                    navBtn.classList.remove('text-emerald-600');
+                    navBtn.classList.add('text-slate-400');
+                }
+            });
+            if (tabId === 'analytics') renderAnalytics();
+            if (tabId === 'history') renderHistoryLog();
+        }
+
+        function setCategoryFilter(cat) {
+            selectedCategory = cat;
+            renderCategoryFilters();
+            renderItems();
+        }
+
+        function setStockStatusFilter(status) {
+            stockStatusFilter = (stockStatusFilter === status && status !== 'all') ? 'all' : status;
+            renderItems();
+        }
+
+        function resetAllFilters() {
+            selectedCategory = 'all';
+            stockStatusFilter = 'all';
+            document.getElementById('searchInput').value = '';
+            renderCategoryFilters();
+            renderItems();
+        }
+
+        function clearSearch() {
+            document.getElementById('searchInput').value = '';
+            renderItems();
+        }
+
+        function openIosGuideModal() {
+            document.getElementById('iosGuideModal').classList.remove('hidden');
+        }
+
+        function closeIosGuideModal() {
+            document.getElementById('iosGuideModal').classList.add('hidden');
+        }
+
+        function showSyncDetails() {
+            switchTab('settings');
+            showToast('جميع بياناتك محفوظة تلقائياً في الآيفون والسحابة ✓', 'success');
+        }
+
+        function showToast(msg, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMessage');
+            const toastIcon = document.getElementById('toastIcon');
+
+            toastMsg.textContent = msg;
+            if (type === 'success') {
+                toastIcon.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-400"></i>';
+            } else if (type === 'warning') {
+                toastIcon.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-amber-400"></i>';
+            } else if (type === 'error') {
+                toastIcon.innerHTML = '<i class="fa-solid fa-circle-xmark text-rose-400"></i>';
+            } else {
+                toastIcon.innerHTML = '<i class="fa-solid fa-circle-info text-sky-400"></i>';
+            }
+
+            toast.classList.remove('hidden');
+            clearTimeout(window._toastTimer);
+            window._toastTimer = setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 2600);
+        }
+
+        // Expose functions to global window scope for inline HTML handlers
+        Object.assign(window, {
+            switchTab,
+            setCategoryFilter,
+            setStockStatusFilter,
+            resetAllFilters,
+            clearSearch,
+            renderItems,
+            adjustStock,
+            openModal,
+            closeModal,
+            handleSaveProduct,
+            askDeleteItem,
+            closeDeleteModal,
+            clearHistoryLog,
+            copyBackupToClipboard,
+            openPasteRestoreModal,
+            closePasteRestoreModal,
+            restoreFromPastedCode,
+            exportToJSON,
+            exportToCSV,
+            importFromJSON,
+            openScannerModal,
+            closeScannerModal,
+            openIosGuideModal,
+            closeIosGuideModal,
+            showSyncDetails
+        });
+
+        // Start App
+        window.addEventListener('DOMContentLoaded', initializeData);
+    </script>
+</body>
+</html>
